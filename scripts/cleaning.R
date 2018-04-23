@@ -60,6 +60,17 @@ testheaders <- map2(rep(chunks, 3), rep(1:3, each=3),
                     ~ extract_headers(visitordata$headers[.y][[1]][, .x]))
 
 
+values <- c('senninkai', 'rate', 'hyakumanen')
+
+columns_ab <- c('kennai - jukuhaku', 'kennai - higaeri', 
+             'kengai - jukuhaku', 'kengai - higaeri')
+
+columns_c <- c('kankou - jukuhaku', 'kankou - higaeri', 
+             'bijinesu - jukuhaku', 'bijinesu - higaeri')
+
+columns_de <- c()
+
+
 
 visitordata$data[1][[1]] %>% select(X__1, X__2) %>% gather(key = 'staytype', value = 'visitors')
 
