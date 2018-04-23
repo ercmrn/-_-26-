@@ -20,8 +20,10 @@ visitordata <-
     as.data.frame() %>% 
     rename('sheet' = '.') %>% 
     mutate_if(.predicate = is.factor, .funs = as.character) %>% 
-    mutate(data = purrr::pmap(.l = list(datapath, sheet, 'B8:M54', FALSE), .f = read_xls),
-           headers = purrr::pmap(.l = list(datapath, sheet, 'B4:M7'), .f=read_xls))
+    mutate(data = pmap(.l = list(datapath, sheet, 'B8:M54', FALSE), 
+                       .f = read_xls),
+           headers = pmap(.l = list(datapath, sheet, 'B4:M7'), 
+                          .f = read_xls))
 
 
 eventdata <- 
@@ -33,7 +35,7 @@ eventdata <-
     mutate(data = purrr::pmap(.l = list(datapath, sheet, 'B7:I53', FALSE), 
                               .f = read_xls),
            headers = purrr::pmap(.l = list(datapath, sheet, 'B4:I6'), 
-                                 .f=read_xls))
+                                 .f = read_xls))
 
 rows <- read_xls(datapath, '1', 'A8:A54', c('都道府県'))
 
@@ -42,10 +44,10 @@ chunks <- split(1:12, ceiling(seq_along(1:12)/4))
 
 extract_headers <- function(section){
     measure <- section[[1, 1]]
-    location <- c(section[[2, 1]], section[[2, 3]])
+    location <- c(rep(section[[2, 1]], 2), rep(section[[2, 3]], 2))
     combinations <- 
         rep(measure, 4) %>% 
-        cbind(rep(location, 2)) %>% 
+        cbind(location) %>% 
         cbind(as.character(section[3,])) %>% 
         as.data.frame() %>% 
         `colnames<-`(c('measure', 'location', 'type')) %>% 
@@ -53,6 +55,13 @@ extract_headers <- function(section){
     
     combinations$output
 }
+
+testheaders <- map2(rep(chunks, 3), rep(1:3, each=3), 
+                    ~ extract_headers(visitordata$headers[.y][[1]][, .x]))
+
+
+
+visitordata$data[1][[1]] %>% select(X__1, X__2) %>% gather(key = 'staytype', value = 'visitors')
 
 
 # for each header in visitordata$headers, for each chunk in header, extract_headers
