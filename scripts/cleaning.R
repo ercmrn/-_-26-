@@ -50,7 +50,7 @@ tidy_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attr
         sheet %>% 
             separate(都道府県, c('index', '都道府県')) %>% 
             select(-観光地点, -index) %>% 
-            gather(key = 'attraction_type', value = 'count', -都道府県)
+            gather(key = 'attraction_type', value = 'num_attractions', -都道府県)
     }
     else {
         sheet %>% 
@@ -65,6 +65,22 @@ tidy_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attr
 }
 
 
+clean_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')){
+    type = match.arg(type)
+    if (type == 'attractions') {
+        sheet %>% 
+            mutate(num_attractions = ifelse(is.na(num_attractions), 0, num_attractions))
+    }
+    else {
+        sheet %>% 
+            mutate_at(vars(matches('（')),
+                      .funs = as.numeric) %>% 
+            mutate_at(vars(matches('（')),
+                      .funs = function(x) ifelse(is.na(x), 0, x))
+    }
+}
+
+
 visitor_origins <- c('県内', '県外')
 visit_purposes <- c('観光目的', 'ビジネス目的')
 ranges <- c(rep('A8:M54', 3), rep('A7:I53', 2))
@@ -75,17 +91,38 @@ descriptions <- c(rep('visitor_origins', 2),
 
 
 
-headers <- 
-    map2(.x = sheets,
-         .y = descriptions,
-         .f = define_cols)
+#headers <- 
+#    map2(.x = sheets,
+#         .y = descriptions,
+#         .f = define_cols)
+#
+#
+#data <- 
+#    pmap(.l = list(datapath, sheets, ranges, headers),
+#         .f = read_xls)
+#
+#
+#reshaped_data <- 
+#    map2(.x = data, 
+#         .y = descriptions, 
+#         .f = tidy_data)
+#
+#
+#cleaned_data <- 
+#    map2(.x = reshaped_data,
+#         .y = descriptions,
+#         .f = clean_data)
 
 
-data <- 
-    pmap(.l = list(datapath, sheets, ranges, headers),
-         .f = read_xls)
-
-
-clean_data <- map2(.x = data, 
-                   .y = descriptions, 
-                   .f = tidy_data)
+cleaned_data <- 
+    pmap(.l = list(datapath, 
+                   sheets, 
+                   ranges, 
+                   map2(.x = sheets,
+                        .y = descriptions,
+                        .f = define_cols)),
+         .f = read_xls) %>% 
+    map2(.y = descriptions, 
+         .f = tidy_data) %>% 
+    map2(.y = descriptions,
+         .f = clean_data)
