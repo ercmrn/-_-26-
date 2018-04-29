@@ -1,3 +1,8 @@
+# used a single example to prototype the data reshaping and cleaning process
+# looking at other examples, it holds up pretty well, but quarterly data
+# has two extra sheets per file.
+# starting a new script to collect all the files
+
 library(tidyverse)
 library(readxl)
 
