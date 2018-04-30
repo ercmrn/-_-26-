@@ -3,6 +3,8 @@ library(tidy)
 library(httr)
 
 
+# TODO: fix filename
+
 extract_links <- function(source_url) {
 
     page <- read_html(source_url)
@@ -80,6 +82,9 @@ parse_metadata <- function(string) {
 }
 
 
+GET_func <- function(link, filename) {
+    GET(link, write_disk(paste0('./data/', gsub('/common/', '', filename))))
+}
 
 
 source_url <- 'http://www.mlit.go.jp/kankocho/siryou/toukei/irikomi.html'
@@ -92,13 +97,8 @@ extracted_data <-
     mutate(data_link = paste0(scheme, '://', server, filename),
            write_name = gsub('/common/', '', filename))
 
-files <- GET(extracted_data$data_link[1], httr::write_disk('./data/test.xls'))
-
 files <- 
     map2(.x = extracted_data$data_link,
          .y = extracted_data$filename,
          .f = GET_func)
 
-GET_func <- function(link, filename) {
-    GET(link, write_disk(paste0('./data/', gsub('/common/', '', filename))))
-}
