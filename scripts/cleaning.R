@@ -10,6 +10,7 @@ datapath <- './data/001212602.xls'
 
 # readxl::excel_sheets(datapath)
 # note that column b is actually a total of columns c:h
+# further, appears that Okinawa and Hokkaido might have some separately collected data
 
 visitor_cols <- function(descriptions) {
     measurements <- c('観光入込客数（千人回）',
@@ -50,6 +51,8 @@ define_cols <- function(sheet, description) {
 
 
 tidy_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')) {
+# TODO: add in elif to handle the "parameter" sheets
+    
     type = match.arg(type)
     if (type == 'attractions') {
         sheet %>% 
@@ -131,3 +134,6 @@ cleaned_data <-
          .f = tidy_data) %>% 
     map2(.y = descriptions,
          .f = clean_data)
+
+# TODO: functionalized cleaning, applied to all of the sheets
+# TODO: combine cleaned data with metadata, somehow (perhaps as a list of dfs + mutate?)
