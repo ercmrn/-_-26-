@@ -15,7 +15,7 @@ datapath <- './data/001127121.xls'
 
 
 quarterly <- 
-    excel_sheets(datapath) %>% 
+    excel_sheets(datapath)[-1] %>% 
     map2(.x = datapath, .y = ., read_xls)
 
 # maybe change the column naming strategy to a list of column name vectors
@@ -36,11 +36,13 @@ quarterly <-
 # note that column b is actually a total of columns c:h
 # further, appears that Okinawa and Hokkaido might have some separately collected data
 
+
+#expects an index
 visitor_cols <- function(sheet) {
     visit_length <- c('宿泊', '日帰り')
     measurements <- c('観光入込客数（千人回）',
                       '観光消費額単価（円/人回）',
-                      '観光消費額（百万円）') 
+                      '観光消費額（百万円）')
     
     if (sheet == '1') {
         cols <- 
@@ -62,7 +64,7 @@ visitor_cols <- function(sheet) {
             unite('columns', colnames(.), sep = '、')
     }
 
-    else (sheet == '3') {
+    else {
         cols <- 
             cbind('訪日外国人', 
                   rep(c('観光目的', 'ビジネス目的'), each = 2),
@@ -75,36 +77,78 @@ visitor_cols <- function(sheet) {
     c('都道府県', cols[[1]])
 }
 
+# find the headers. This really sucks, though.
+#expects a sheet
+othercols <- function(sheet) {
 
-define_cols <- function(sheet) {
+    headerrange <- c(match('都道府県', sheet[[1]]), 
+                     match('01 北海道', sheet[[1]]) - 1)
+    
+    map(sheet[headerrange[1]:headerrange[2],], function(x) x[!is.na(x)]) %>% 
+        map(function(x) gsub('\n', '', x)) %>% 
+        as.character()
+}
 
-    if (sheet %in% as.character(1:3)) {
-        cols <- visitor_cols(sheet)
+#findranges <- function(sheet) {
+#    c(match('都道府県', sheet[[1]]), 
+#      match('01 北海道', sheet[[1]]) - 1,
+#      match('01 北海道', sheet[[1]]),
+#      match('47 沖縄県', sheet[[1]]))
+#}
+
+define_cols <- function(sheet, index) {
+    
+    if (index %in% as.character(1:3)) {
+        cols <- visitor_cols(index)
     }
     
-    else if (sheet %in% as.character(4:5)) {
-        cols <- c('都道府県', '観光地点', '自然', '歴史・文化', '温泉・健康', 
-                  'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ','都市型観光','その他','行祭事・ イベント')
-    }
-    
-    else if (sheet == '6') {
-        cols <- c('都道府県', 'パラメータ地点総数', '自然', '歴史・文化',
-                  '温泉・健康', 'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ', '都市型観光', 'その他')
-    }
-    
-    else if (sheet == '7') {
-        cols <- c('都道府県', 'サンプル数（人）', '平均同行者数（人）', 
-                  '1人当たり 平均訪問地点数', '1人当たり 平均消費額（円）',
-                  '1人当たり平均訪問 都道府県数')
-    }
     else {
-        cols <- ''
+        cols <- othercols(sheet)
     }
     
     enc2utf8(cols)
     
 }
 
+extract_data <- function(sheet, index) {
+    datarange <- c(match('01 北海道', sheet[[1]]),
+                   match('47 沖縄県', sheet[[1]]))
+
+    sheet[datarange[1]:datarange[2], ] %>% 
+        `colnames<-`(define_cols(sheet, index))
+    
+}
+
+#define_cols <- function(sheet) {
+#
+#    if (sheet %in% as.character(1:3)) {
+#        cols <- visitor_cols(sheet)
+#    }
+#    
+#    else if (sheet %in% as.character(4:5)) {
+#        cols <- c('都道府県', '観光地点', '自然', '歴史・文化', '温泉・健康', 
+#                  'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ','都市型観光','その他','行祭事・ イベント')
+#    }
+#    
+#    else if (sheet == '6') {
+#        cols <- c('都道府県', 'パラメータ地点総数', '自然', '歴史・文化',
+#                  '温泉・健康', 'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ', '都市型観光', 'その他')
+#    }
+#    
+#    else if (sheet == '7') {
+#        cols <- c('都道府県', 'サンプル数（人）', '平均同行者数（人）', 
+#                  '1人当たり 平均訪問地点数', '1人当たり 平均消費額（円）',
+#                  '1人当たり平均訪問 都道府県数')
+#    }
+#    else {
+#        cols <- ''
+#    }
+#    
+#    enc2utf8(cols)
+#    
+#}
+
+# TODO: change the separate(-hoge) to filter(!= hoge)
 
 tidy_data <- function(sheet, index = as.character(1:7)) {
     index = match.arg(index)
@@ -123,13 +167,13 @@ tidy_data <- function(sheet, index = as.character(1:7)) {
     else if (index == '4') {
         sheet %>% 
             separate(都道府県, c('index', '都道府県')) %>% 
-            select(-観光地点, -index) %>% 
+            select(-観光地点計, -index) %>% 
             gather(key = 'attraction_type', value = 'attractions', -都道府県)
     }
     else if (index == '5') {
         sheet %>% 
             separate(都道府県, c('index', '都道府県')) %>% 
-            select(-観光地点, -index) %>% 
+            select(-観光地点計, -index) %>% 
             gather(key = 'attraction_type', value = '1K_visitors', -都道府県)
     }
     else if (index == '6') {
@@ -148,15 +192,20 @@ tidy_data <- function(sheet, index = as.character(1:7)) {
 
 clean_data <- function(sheet, index = as.character(1:7)) {
     index = match.arg(index)
-    if (type == 'attractions') {
+    if (index %in% as.character(c(4, 6))) {
         sheet %>% 
             mutate(num_attractions = ifelse(is.na(num_attractions), 0, num_attractions))
     }
-    else {
+    else if (index %in% as.character(1:3)) {
         sheet %>% 
             mutate_at(vars(matches('（')),
                       .funs = as.numeric) %>% 
             mutate_at(vars(matches('（')),
+                      .funs = function(x) ifelse(is.na(x), 0, x))
+    }
+    else {
+        sheet %>% 
+            mutate_at(vars(-都道府県),
                       .funs = function(x) ifelse(is.na(x), 0, x))
     }
 }
@@ -176,19 +225,6 @@ clean_data <- function(sheet, index = as.character(1:7)) {
 
 # read in everything, then find the range by hokkaido - okinawa
 
-# find the headers. This really sucks, though.
-othercols <- function(sheet, headerrange) {
-    map(sheet[headerrange[1]:headerrange[2],], function(x) x[!is.na(x)]) %>% 
-        map(function(x) gsub('\n', '', x)) %>% 
-        as.character()
-}
-
-findranges <- function(sheet) {
-    c(match('都道府県', sheet[[1]]), 
-      match('01 北海道', sheet[[1]]) - 1,
-      match('01 北海道', sheet[[1]]),
-      match('47 沖縄県', sheet[[1]]))
-}
 
 #findsheetranges <- function(sheet) {
 #    ranges <- c()
@@ -204,19 +240,37 @@ findranges <- function(sheet) {
 
 
 
-sheets <- excel_sheets(datapath)
+sheets <- excel_sheets(datapath)[-1]
+cols <- map2(.x = sheets,
+             
+             .f = define_cols)
 
 cleaned_data <- 
     pmap(.l = list(datapath, 
-                   sheets, 
-                   ranges, 
-                   map(.x = sheets,
-                       .f = define_cols)),
-         .f = read_xls) %>% 
+                   sheets),
+         .f = ~ read_xls(path = ..1,
+                         sheet = ..2)) %>% 
+    map2(.y = sheets,
+         .f = extract_data) %>% 
     map2(.y = sheets, 
          .f = tidy_data) %>% 
     map2(.y = sheets,
          .f = clean_data)
 
+
+#cleaned_data <- 
+#    pmap(.l = list(datapath, 
+#                   sheets, 
+##                   ranges, 
+#                   map2(.x = sheets,
+#                       .f = define_cols)),
+#         .f = ~ read_xls(path = ..1,
+#                         sheet = ..2,
+#                         col_names = ..3)) %>% 
+#    map2(.y = sheets, 
+#         .f = tidy_data) %>% 
+#    map2(.y = sheets,
+#         .f = clean_data)
+#
 
 
