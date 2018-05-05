@@ -83,7 +83,8 @@ parse_metadata <- function(string) {
 
 
 GET_func <- function(link, filename) {
-    GET(link, write_disk(paste0('./data/', gsub('/common/', '', filename))))
+    GET(link, write_disk(paste0('./data/', gsub('/common/', '', filename)),
+                         overwrite = TRUE))
 }
 
 
