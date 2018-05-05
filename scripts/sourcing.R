@@ -1,6 +1,6 @@
 library(rvest)
-library(tidy)
 library(httr)
+library(tidyverse)
 
 
 # TODO: fix filename
@@ -102,4 +102,3 @@ files <-
     map2(.x = extracted_data$data_link,
          .y = extracted_data$filename,
          .f = GET_func)
-
