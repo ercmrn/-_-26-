@@ -1,7 +1,6 @@
 # used a single example to prototype the data reshaping and cleaning process
 # looking at other examples, it holds up pretty well, but quarterly data
 # has two extra sheets per file.
-# starting a new script to collect all the files
 
 # TODO: increase functionality to handle sheets 6:7 on quarterly data
 # TODO: functionalized cleaning, applied to all of the sheets
@@ -77,7 +76,7 @@ visitor_cols <- function(sheet) {
 }
 
 
-define_cols <- function(sheet, description) {
+define_cols <- function(sheet) {
 
     if (sheet %in% as.character(1:3)) {
         cols <- visitor_cols(sheet)
@@ -89,7 +88,7 @@ define_cols <- function(sheet, description) {
     }
     
     else if (sheet == '6') {
-        cols <- c('都道府県', 'パラメータ 地点総数', '自然', '歴史・文化',
+        cols <- c('都道府県', 'パラメータ地点総数', '自然', '歴史・文化',
                   '温泉・健康', 'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ', '都市型観光', 'その他')
     }
     
@@ -107,31 +106,48 @@ define_cols <- function(sheet, description) {
 }
 
 
-tidy_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')) {
-# TODO: add in elif to handle the "parameter" sheets
+tidy_data <- function(sheet, index = as.character(1:7)) {
+    index = match.arg(index)
     
-    type = match.arg(type)
-    if (type == 'attractions') {
-        sheet %>% 
-            separate(都道府県, c('index', '都道府県')) %>% 
-            select(-観光地点, -index) %>% 
-            gather(key = 'attraction_type', value = 'num_attractions', -都道府県)
-    }
-    else {
+    if (index %in% as.character(1:3)) {
         sheet %>% 
             separate(都道府県, c('index', '都道府県')) %>% 
             select(-index) %>% 
-            gather(key = 'key', value = 'measures', -都道府県) %>% 
+            gather(key = 'key', value = 'values', -都道府県) %>% 
             separate(key, 
-                     c('measure_type', 'visitor_description', 'visit_length'), 
+                     c('visitor_description', 'visit_purpose', 
+                       'visit_length', 'value_type'), 
                      enc2utf8('、')) %>% 
-            spread(measure_type, measures)
+            spread(value_type, values)
+    }
+    else if (index == '4') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-観光地点, -index) %>% 
+            gather(key = 'attraction_type', value = 'attractions', -都道府県)
+    }
+    else if (index == '5') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-観光地点, -index) %>% 
+            gather(key = 'attraction_type', value = '1K_visitors', -都道府県)
+    }
+    else if (index == '6') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-パラメータ地点総数, -index) %>% 
+            gather(key = 'attraction_type', value = 'attractions', -都道府県)
+    }
+    else if (index == '7') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-index)
     }
 }
 
 
-clean_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')){
-    type = match.arg(type)
+clean_data <- function(sheet, index = as.character(1:7)) {
+    index = match.arg(index)
     if (type == 'attractions') {
         sheet %>% 
             mutate(num_attractions = ifelse(is.na(num_attractions), 0, num_attractions))
@@ -148,25 +164,59 @@ clean_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'att
 
 #visitor_origins <- c('県内', '県外')
 #visit_purposes <- c('観光目的', 'ビジネス目的')
-ranges <- c(rep('A8:M54', 3), rep('A7:I53', 2))
 #sheets <- as.character(1:7)
+
+
+#descriptions <- c(rep('visitor_origins', 2), 
+#                  'visit_purposes', 
+#                  rep("attractions", 2))
+
+
+#ranges <- c(rep('A8:M54', 3), rep('A7:I53', 2))
+
+# read in everything, then find the range by hokkaido - okinawa
+
+# find the headers. This really sucks, though.
+othercols <- function(sheet, headerrange) {
+    map(sheet[headerrange[1]:headerrange[2],], function(x) x[!is.na(x)]) %>% 
+        map(function(x) gsub('\n', '', x)) %>% 
+        as.character()
+}
+
+findranges <- function(sheet) {
+    c(match('都道府県', sheet[[1]]), 
+      match('01 北海道', sheet[[1]]) - 1,
+      match('01 北海道', sheet[[1]]),
+      match('47 沖縄県', sheet[[1]]))
+}
+
+#findsheetranges <- function(sheet) {
+#    ranges <- c()
+#    
+#    ranges[[1]] <- paste0('A', match('都道府県', sheet[[1]]), ':',
+#                          'A', match('01 北海道', sheet[[1]]))
+#    
+#    ranges[[2]] <- paste0('A', match('01 北海道', sheet[[1]]), ':',
+#                          LETTERS[ncol(sheet)], match('47 沖縄県', sheet[[1]]))
+#    
+#    ranges
+#}
+
+
+
 sheets <- excel_sheets(datapath)
-
-descriptions <- c(rep('visitor_origins', 2), 
-                  'visit_purposes', 
-                  rep("attractions", 2))
-
 
 cleaned_data <- 
     pmap(.l = list(datapath, 
                    sheets, 
                    ranges, 
-                   map2(.x = sheets,
-                        .y = descriptions,
-                        .f = define_cols)),
+                   map(.x = sheets,
+                       .f = define_cols)),
          .f = read_xls) %>% 
-    map2(.y = descriptions, 
+    map2(.y = sheets, 
          .f = tidy_data) %>% 
-    map2(.y = descriptions,
+    map2(.y = sheets,
          .f = clean_data)
+
+
 
