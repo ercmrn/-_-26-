@@ -1,139 +1,188 @@
 # used a single example to prototype the data reshaping and cleaning process
 # looking at other examples, it holds up pretty well, but quarterly data
 # has two extra sheets per file.
-# starting a new script to collect all the files
+
+# TODO: functionalized cleaning, applied to all of the sheets
+# TODO: combine cleaned data with metadata, somehow (perhaps as a list of dfs + mutate?)
+
 
 library(tidyverse)
 library(readxl)
 
-datapath <- './data/001212602.xls'
 
-# readxl::excel_sheets(datapath)
-# note that column b is actually a total of columns c:h
-# further, appears that Okinawa and Hokkaido might have some separately collected data
+# page 1 is kankou - nihonjin
+# page 2 is business - nihonjin
+# page 3 is kankou / business - gaikokujin
+# page 4 is # of locations/events
+# page 5 is # of visitors for locations/events
+# page 6 is # of parameter locations?
+# page 7 is # of sampled visitors to parameter locations?
 
-visitor_cols <- function(descriptions) {
+
+visitor_cols <- function(sheetname) {
+    visit_length <- c('宿泊', '日帰り')
     measurements <- c('観光入込客数（千人回）',
                       '観光消費額単価（円/人回）',
-                      '観光消費額（百万円）') 
-    visit_length <- c('宿泊', '日帰り')
+                      '観光消費額（百万円）')
     
-    cols <- 
-        cbind(rep(measurements, each = 4), 
-              rep(descriptions, each = 2), 
-              visit_length) %>% 
-        as.data.frame() %>% 
-        unite('columns', colnames(.), sep = '、')
+    if (sheetname == '1') {
+        cols <- 
+            cbind(rep(c('県内', '県外'), each = 2), 
+                  '観光目的',
+                  visit_length,
+                  rep(measurements, each = 4)) %>% 
+            as.data.frame() %>% 
+            unite('columns', colnames(.), sep = '、')
+    }
+        
+    else if (sheetname == '2') {
+        cols <- 
+            cbind(rep(c('県内', '県外'), each = 2), 
+                  'ビジネス目的',
+                  visit_length,
+                  rep(measurements, each = 4)) %>% 
+            as.data.frame() %>% 
+            unite('columns', colnames(.), sep = '、')
+    }
+
+    else {
+        cols <- 
+            cbind('訪日外国人', 
+                  rep(c('観光目的', 'ビジネス目的'), each = 2),
+                  visit_length,
+                  rep(measurements, each = 4)) %>% 
+            as.data.frame() %>% 
+            unite('columns', colnames(.), sep = '、')
+    }
     
     c('都道府県', cols[[1]])
 }
 
 
-define_cols <- function(sheet, description) {
-    if (sheet %in% as.character(1:3)) {
-        input = eval(parse(text = description))
-        enc2utf8(visitor_cols(input))
-    }
-    else {
-        attractions_cols <- c('都道府県',
-                              '観光地点',
-                              '自然',
-                              '歴史・文化',
-                              '温泉・健康',
-                              'ｽﾎﾟｰﾂ・ ﾚｸﾘｴｰｼｮﾝ',
-                              '都市型観光',
-                              'その他',
-                              '行祭事・ イベント')
-        
-        enc2utf8(attractions_cols)
-    }
+othercols <- function(sheet) {
+
+    headerrange <- c(match('都道府県', sheet[[1]]), 
+                     match('01 北海道', sheet[[1]]) - 1)
+    
+    map(sheet[headerrange[1]:headerrange[2],], function(x) x[!is.na(x)]) %>% 
+        map(function(x) gsub('\n', '', x)) %>% 
+        as.character() %>% 
+        "["(. != "character(0)") # I can't believe this works
 }
 
 
-tidy_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')) {
-# TODO: add in elif to handle the "parameter" sheets
+define_cols <- function(sheet, sheetname) {
     
-    type = match.arg(type)
-    if (type == 'attractions') {
-        sheet %>% 
-            separate(都道府県, c('index', '都道府県')) %>% 
-            select(-観光地点, -index) %>% 
-            gather(key = 'attraction_type', value = 'num_attractions', -都道府県)
+    if (sheetname %in% as.character(1:3)) {
+        cols <- visitor_cols(sheetname)
     }
+    
     else {
+        cols <- othercols(sheet)
+    }
+    
+    enc2utf8(cols)
+    
+}
+
+
+extract_data <- function(sheet, sheetname) {
+    datarange <- c(match('01 北海道', sheet[[1]]),
+                   match('47 沖縄県', sheet[[1]]))
+
+    columns <- define_cols(sheet, sheetname)
+    
+    sheet[datarange[1]:datarange[2], 1:length(columns)] %>% 
+        `colnames<-`(columns)
+    
+}
+
+
+tidy_data <- function(sheet, sheetname) {
+
+    if (sheetname %in% as.character(1:3)) {
         sheet %>% 
             separate(都道府県, c('index', '都道府県')) %>% 
             select(-index) %>% 
-            gather(key = 'key', value = 'measures', -都道府県) %>% 
+            gather(key = 'key', value = 'values', -都道府県) %>% 
             separate(key, 
-                     c('measure_type', 'visitor_description', 'visit_length'), 
+                     c('visitor_description', 'visit_purpose', 
+                       'visit_length', 'value_type'), 
                      enc2utf8('、')) %>% 
-            spread(measure_type, measures)
+            spread(value_type, values)
     }
-}
-
-
-clean_data <- function(sheet, type = c('visitor_origins', 'visit_purposes', 'attractions')){
-    type = match.arg(type)
-    if (type == 'attractions') {
+    else if (sheetname == '4') {
         sheet %>% 
-            mutate(num_attractions = ifelse(is.na(num_attractions), 0, num_attractions))
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-index) %>% 
+            gather(key = 'attraction_type', value = 'attractions', -都道府県)
+    }
+    else if (sheetname == '5') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-index) %>% 
+            gather(key = 'attraction_type', value = '1K_visitors', -都道府県)
+    }
+    else if (sheetname == '6') {
+        sheet %>% 
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-index) %>% 
+            gather(key = 'attraction_type', value = 'attractions', -都道府県)
     }
     else {
         sheet %>% 
-            mutate_at(vars(matches('（')),
-                      .funs = as.numeric) %>% 
-            mutate_at(vars(matches('（')),
-                      .funs = function(x) ifelse(is.na(x), 0, x))
+            separate(都道府県, c('index', '都道府県')) %>% 
+            select(-index)
     }
 }
 
+#-観光地点計, -パラメータ地点総数, 
 
-visitor_origins <- c('県内', '県外')
-visit_purposes <- c('観光目的', 'ビジネス目的')
-ranges <- c(rep('A8:M54', 3), rep('A7:I53', 2))
-sheets <- as.character(1:5)
-descriptions <- c(rep('visitor_origins', 2), 
-                  'visit_purposes', 
-                  rep("attractions", 2))
+clean_data <- function(sheet, sheetname) {
 
+    sheet %>% 
+        mutate_if(.predicate = is.character,
+                  .funs = enc2native) %>% 
+        mutate_at(vars(matches('（|数|attractions|1K_visitors')),
+                  .funs = function(x) as.numeric(ifelse(is.na(x), 0, x)))
+}
 
+# match() function gives indices within an object
+# using match() and ncol() to define ranges in a spreadsheet can be very useful
+# sheet names can be extremely misleading...
 
-#headers <- 
-#    map2(.x = sheets,
-#         .y = descriptions,
-#         .f = define_cols)
-#
-#
-#data <- 
-#    pmap(.l = list(datapath, sheets, ranges, headers),
-#         .f = read_xls)
-#
-#
-#reshaped_data <- 
-#    map2(.x = data, 
-#         .y = descriptions, 
-#         .f = tidy_data)
-#
-#
-#cleaned_data <- 
-#    map2(.x = reshaped_data,
-#         .y = descriptions,
-#         .f = clean_data)
-
+sheets <- excel_sheets(datapath)[-1]
 
 cleaned_data <- 
     pmap(.l = list(datapath, 
-                   sheets, 
-                   ranges, 
-                   map2(.x = sheets,
-                        .y = descriptions,
-                        .f = define_cols)),
-         .f = read_xls) %>% 
-    map2(.y = descriptions, 
+                   sheets),
+         .f = ~ read_xls(path = ..1,
+                         sheet = ..2)) %>% 
+    map2(.y = sheets,
+         .f = extract_data) %>% 
+    map2(.y = sheets, 
          .f = tidy_data) %>% 
-    map2(.y = descriptions,
+    map2(.y = sheets,
          .f = clean_data)
 
-# TODO: functionalized cleaning, applied to all of the sheets
-# TODO: combine cleaned data with metadata, somehow (perhaps as a list of dfs + mutate?)
+
+wrangle <- function(datapath){
+    sheets <- excel_sheets(datapath)[-1]
+    
+    pmap(.l = list(datapath, 
+                   sheets),
+         .f = ~ read_xls(path = ..1,
+                         sheet = ..2)) %>% 
+        map2(.y = sheets,
+             .f = extract_data) %>% 
+        map2(.y = sheets, 
+             .f = tidy_data) %>% 
+        map2(.y = sheets,
+             .f = clean_data)
+}
+
+filelist <- paste0("./data/", list.files('data/', '.xls'))
+shortlist <- filelist[1:12]
+all_data <- map(filelist, wrangle)
+
+

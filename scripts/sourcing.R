@@ -1,9 +1,7 @@
 library(rvest)
-library(tidy)
 library(httr)
+library(tidyverse)
 
-
-# TODO: fix filename
 
 extract_links <- function(source_url) {
 
@@ -25,7 +23,7 @@ extract_links <- function(source_url) {
                url_parse(source_url)[c('scheme', 'server')],
                linkattr[grepl('.xls', linkattr)], 
                stringsAsFactors = FALSE) %>% 
-        `colnames<-`(c('li_text', 'scheme', 'server', 'filename')) %>% 
+        `colnames<-`(c('li_text', 'scheme', 'server', 'li_filepath')) %>% 
         mutate(timerange = ifelse(grepl('年間値', li_text), 
                                   'yearly', 
                                   'quarterly'),
@@ -83,7 +81,8 @@ parse_metadata <- function(string) {
 
 
 GET_func <- function(link, filename) {
-    GET(link, write_disk(paste0('./data/', gsub('/common/', '', filename))))
+    GET(link, write_disk(paste0('./data/', filename),
+                         overwrite = TRUE))
 }
 
 
@@ -94,8 +93,8 @@ extracted_data <- extract_links(source_url)
 extracted_data <- 
     extracted_data %>% 
     inner_join(extract_metadata(extracted_data), by = 'li_text') %>% 
-    mutate(data_link = paste0(scheme, '://', server, filename),
-           write_name = gsub('/common/', '', filename))
+    mutate(data_link = paste0(scheme, '://', server, li_filepath),
+           filename = gsub('/common/', '', li_filepath))
 
 files <- 
     map2(.x = extracted_data$data_link,
