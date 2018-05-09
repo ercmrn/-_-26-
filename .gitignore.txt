@@ -37,3 +37,5 @@ rsconnect/
 
 # Excel 97-2003 files for this project
 *.xls
+
+data/*
