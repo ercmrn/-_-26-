@@ -33,22 +33,6 @@ extract_links <- function(source_url) {
 }
 
 
-extract_metadata <- function(files) {
-    metadata_cols <- c('li_text', 'period', 'year', 'months', 
-                       'included_prefectures', 'total_prefectures', 
-                       'alt_period', 'alt_date_jpn',
-                       'filetype_name', 'filesize')
-    
-    data.frame(map(files$li_text, parse_metadata), 
-               stringsAsFactors = FALSE) %>% 
-        t() %>% 
-        as.data.frame() %>% 
-        `rownames<-`(NULL) %>% 
-        `colnames<-`(metadata_cols)
-    
-}
-
-
 parse_metadata <- function(string) {
     
     regex_list <- c('（集計済：([[:digit:]]+)/',
@@ -80,9 +64,32 @@ parse_metadata <- function(string) {
 }
 
 
+extract_metadata <- function(files) {
+    metadata_cols <- c('li_text', 'period', 'year', 'months', 
+                       'included_prefectures', 'total_prefectures', 
+                       'alt_period', 'alt_date_jpn',
+                       'filetype_name', 'filesize')
+    
+    data.frame(map(files$li_text, parse_metadata), 
+               stringsAsFactors = FALSE) %>% 
+        t() %>% 
+        as.data.frame() %>% 
+        `rownames<-`(NULL) %>% 
+        `colnames<-`(metadata_cols)
+    
+}
+
+
 GET_func <- function(link, filename) {
     GET(link, write_disk(paste0('./data/', filename),
                          overwrite = TRUE))
+}
+
+
+calculate_year <- function(year, months) {
+    paste0(as.character(1988 + as.numeric(as.character(year))),
+           '-',
+           as.numeric(str_match(months, '[[:digit:]]+$')) %/% 3)
 }
 
 
@@ -94,7 +101,8 @@ extracted_data <-
     extracted_data %>% 
     inner_join(extract_metadata(extracted_data), by = 'li_text') %>% 
     mutate(data_link = paste0(scheme, '://', server, li_filepath),
-           filename = gsub('/common/', '', li_filepath))
+           filename = gsub('/common/', '', li_filepath),
+           year_quarter = ifelse(timerange == 'yearly', year, calculate_year(year, months)))
 
 files <- 
     map2(.x = extracted_data$data_link,
