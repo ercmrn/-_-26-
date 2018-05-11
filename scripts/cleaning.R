@@ -2,13 +2,13 @@
 # looking at other examples, it holds up pretty well, but quarterly data
 # has two extra sheets per file.
 
-# TODO: functionalized cleaning, applied to all of the sheets
 # TODO: combine cleaned data with metadata, somehow (perhaps as a list of dfs + mutate?)
-
+# TODO: refactor to run loop over one file, adding extracted data to a set of
+# output dfs
 
 library(tidyverse)
 library(readxl)
-
+library(data.table)
 
 # page 1 is kankou - nihonjin
 # page 2 is business - nihonjin
@@ -20,10 +20,26 @@ library(readxl)
 
 
 visitor_cols <- function(sheetname) {
+    
+    # TODO: fill the columns with a different approach?
+    
     visit_length <- c('宿泊', '日帰り')
     measurements <- c('観光入込客数（千人回）',
                       '観光消費額単価（円/人回）',
                       '観光消費額（百万円）')
+    visitor_type_a <- c('県内', '県外')
+    visitor_type_b <- '訪日外国人'
+    visitor_purpose_a <- '観光目的'
+    visitor_purpose_b <- 'ビジネス目的'
+    
+    combine_keys <- function(visitor_type, visitor_purpose) {
+        cbind(rep(c('県内', '県外'), each = 2), 
+              '観光目的',
+              visit_length,
+              rep(measurements, each = 4)) %>% 
+            as.data.frame() %>% 
+            unite('columns', colnames(.), sep = '、')
+    }
     
     if (sheetname == '1') {
         cols <- 
@@ -60,7 +76,8 @@ visitor_cols <- function(sheetname) {
 
 
 othercols <- function(sheet) {
-
+    # TODO: refactor to accept/find dynamic ranges?
+    
     headerrange <- c(match('都道府県', sheet[[1]]), 
                      match('01 北海道', sheet[[1]]) - 1)
     
@@ -85,8 +102,8 @@ define_cols <- function(sheet, sheetname) {
     
 }
 
-
 extract_data <- function(sheet, sheetname) {
+    # TODO: refactor to accept/find dynamic ranges?
     datarange <- c(match('01 北海道', sheet[[1]]),
                    match('47 沖縄県', sheet[[1]]))
 
@@ -138,32 +155,39 @@ tidy_data <- function(sheet, sheetname) {
 
 #-観光地点計, -パラメータ地点総数, 
 
-clean_data <- function(sheet, sheetname) {
+clean_data <- function(sheet, sheetname, datapath) {
 
     sheet %>% 
         mutate_if(.predicate = is.character,
                   .funs = enc2native) %>% 
         mutate_at(vars(matches('（|数|attractions|1K_visitors')),
-                  .funs = function(x) as.numeric(ifelse(is.na(x), 0, x)))
+                  .funs = function(x) as.numeric(ifelse(is.na(x), 0, x))) %>% 
+        mutate(filename = gsub('./data/', '', datapath))
 }
 
 # match() function gives indices within an object
 # using match() and ncol() to define ranges in a spreadsheet can be very useful
 # sheet names can be extremely misleading...
 
-sheets <- excel_sheets(datapath)[-1]
+#sheets <- excel_sheets(datapath)[-1]
+#
+#cleaned_data <- 
+#    pmap(.l = list(datapath, 
+#                   sheets),
+#         .f = ~ read_xls(path = ..1,
+#                         sheet = ..2)) %>% 
+#    map2(.y = sheets,
+#         .f = extract_data) %>% 
+#    map2(.y = sheets, 
+#         .f = tidy_data) %>% 
+#    map2(.y = sheets,
+#         .f = clean_data)
 
-cleaned_data <- 
-    pmap(.l = list(datapath, 
-                   sheets),
-         .f = ~ read_xls(path = ..1,
-                         sheet = ..2)) %>% 
-    map2(.y = sheets,
-         .f = extract_data) %>% 
-    map2(.y = sheets, 
-         .f = tidy_data) %>% 
-    map2(.y = sheets,
-         .f = clean_data)
+
+join_metadata <- function(sheet) {
+    sheet %>% 
+        inner_join(extracted_data, by = 'filename')
+}
 
 
 wrangle <- function(datapath){
@@ -177,12 +201,19 @@ wrangle <- function(datapath){
              .f = extract_data) %>% 
         map2(.y = sheets, 
              .f = tidy_data) %>% 
-        map2(.y = sheets,
-             .f = clean_data)
+        pmap(.l = list(., sheets, datapath),
+             .f = ~ clean_data(..1, ..2, ..3)) %>% 
+        map(join_metadata)
 }
 
+
 filelist <- paste0("./data/", list.files('data/', '.xls'))
-shortlist <- filelist[1:12]
 all_data <- map(filelist, wrangle)
 
+firstsheets <- lapply(all_data, function(x) {
+    x[[1]]
+})
+
+testbinding <- bind_rows(firstsheets)
+testbinding <- rbindlist(firstsheets)
 
