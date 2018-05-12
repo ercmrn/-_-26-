@@ -169,24 +169,11 @@ clean_data <- function(sheet, sheetname, datapath) {
 # using match() and ncol() to define ranges in a spreadsheet can be very useful
 # sheet names can be extremely misleading...
 
-#sheets <- excel_sheets(datapath)[-1]
-#
-#cleaned_data <- 
-#    pmap(.l = list(datapath, 
-#                   sheets),
-#         .f = ~ read_xls(path = ..1,
-#                         sheet = ..2)) %>% 
-#    map2(.y = sheets,
-#         .f = extract_data) %>% 
-#    map2(.y = sheets, 
-#         .f = tidy_data) %>% 
-#    map2(.y = sheets,
-#         .f = clean_data)
-
 
 join_metadata <- function(sheet) {
     sheet %>% 
-        inner_join(extracted_data, by = 'filename')
+        inner_join(extracted_data[, c('filename', 'year_quarter')], 
+                   by = 'filename')
 }
 
 
