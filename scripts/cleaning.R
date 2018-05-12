@@ -1,14 +1,8 @@
-# used a single example to prototype the data reshaping and cleaning process
-# looking at other examples, it holds up pretty well, but quarterly data
-# has two extra sheets per file.
-
-# TODO: combine cleaned data with metadata, somehow (perhaps as a list of dfs + mutate?)
 # TODO: refactor to run loop over one file, adding extracted data to a set of
-# output dfs
-
-library(tidyverse)
-library(readxl)
-library(data.table)
+# TODO: filter out totals values: 観光地点計, パラメータ地点総数
+# TODO: refactor visitor_cols() and other_cols() to avoid so much if-else and assignment
+# TODO: refactor extract_data() and other_cols() to accept/find dynamic ranges?
+# TODO: new script for EDA!
 
 # page 1 is kankou - nihonjin
 # page 2 is business - nihonjin
@@ -19,9 +13,13 @@ library(data.table)
 # page 7 is # of sampled visitors to parameter locations?
 
 
+library(tidyverse)
+library(readxl)
+library(data.table)
+
+
 visitor_cols <- function(sheetname) {
-    
-    # TODO: fill the columns with a different approach?
+    # accept a sheet name, and return the appropriate column names    
     
     visit_length <- c('宿泊', '日帰り')
     measurements <- c('観光入込客数（千人回）',
@@ -32,14 +30,26 @@ visitor_cols <- function(sheetname) {
     visitor_purpose_a <- '観光目的'
     visitor_purpose_b <- 'ビジネス目的'
     
-    combine_keys <- function(visitor_type, visitor_purpose) {
-        cbind(rep(c('県内', '県外'), each = 2), 
-              '観光目的',
-              visit_length,
-              rep(measurements, each = 4)) %>% 
-            as.data.frame() %>% 
-            unite('columns', colnames(.), sep = '、')
-    }
+    #combine_keys <- function(visitor_type, visitor_purpose) {
+    #    cbind(rep(c('県内', '県外'), each = 2), 
+    #          '観光目的',
+    #          visit_length,
+    #          rep(measurements, each = 4)) %>% 
+    #        as.data.frame() %>% 
+    #        unite('columns', colnames(.), sep = '、')
+    #}
+    #
+    #if (sheetname == '1') {
+    #    cols <- combine_keys(visitor_type_a, visitor_purpose_a)
+    #}
+    #
+    #else if (sheetname == '2') {
+    #    cols <- combine_keys(visitor_type_a, visitor_purpose_b)
+    #}
+    #
+    #else {
+    #    cols <- combine_keys(visitor_type_b, c(visitor_purpose_a, visitor_purpose_b))
+    #}
     
     if (sheetname == '1') {
         cols <- 
@@ -76,8 +86,7 @@ visitor_cols <- function(sheetname) {
 
 
 othercols <- function(sheet) {
-    # TODO: refactor to accept/find dynamic ranges?
-    
+
     headerrange <- c(match('都道府県', sheet[[1]]), 
                      match('01 北海道', sheet[[1]]) - 1)
     
@@ -102,8 +111,9 @@ define_cols <- function(sheet, sheetname) {
     
 }
 
+
 extract_data <- function(sheet, sheetname) {
-    # TODO: refactor to accept/find dynamic ranges?
+
     datarange <- c(match('01 北海道', sheet[[1]]),
                    match('47 沖縄県', sheet[[1]]))
 
@@ -153,21 +163,18 @@ tidy_data <- function(sheet, sheetname) {
     }
 }
 
-#-観光地点計, -パラメータ地点総数, 
 
-clean_data <- function(sheet, sheetname, datapath) {
+convert_data <- function(sheet, sheetname, datapath) {
 
     sheet %>% 
         mutate_if(.predicate = is.character,
                   .funs = enc2native) %>% 
         mutate_at(vars(matches('（|数|attractions|1K_visitors')),
                   .funs = function(x) as.numeric(ifelse(is.na(x), 0, x))) %>% 
+        mutate_if(.predicate = is.numeric,
+                  .funs = function(x) ifelse(is.na(x), 0, x)) %>% 
         mutate(filename = gsub('./data/', '', datapath))
 }
-
-# match() function gives indices within an object
-# using match() and ncol() to define ranges in a spreadsheet can be very useful
-# sheet names can be extremely misleading...
 
 
 join_metadata <- function(sheet) {
@@ -177,7 +184,7 @@ join_metadata <- function(sheet) {
 }
 
 
-wrangle <- function(datapath){
+clean_file <- function(datapath){
     sheets <- excel_sheets(datapath)[-1]
     
     pmap(.l = list(datapath, 
@@ -189,18 +196,36 @@ wrangle <- function(datapath){
         map2(.y = sheets, 
              .f = tidy_data) %>% 
         pmap(.l = list(., sheets, datapath),
-             .f = ~ clean_data(..1, ..2, ..3)) %>% 
+             .f = ~ convert_data(..1, ..2, ..3)) %>% 
         map(join_metadata)
 }
 
 
 filelist <- paste0("./data/", list.files('data/', '.xls'))
-all_data <- map(filelist, wrangle)
+all_data <- map(filelist, clean_file)
 
-firstsheets <- lapply(all_data, function(x) {
-    x[[1]]
-})
+tables <- # I seriously can't believe this worked so easily
+    lapply(1:7, function(j) {
+        rbindlist(lapply(all_data, function(i) { 
+            tryCatch({ i[[j]] },
+                error = function(e) { NULL }) 
+            }))
+        })
 
-testbinding <- bind_rows(firstsheets)
-testbinding <- rbindlist(firstsheets)
+
+visitordata <- rbindlist(list(tables[[1]], tables[[2]], tables[[3]])) 
+    
+
+visitordata %>%
+    filter(grepl('-', year_quarter)) %>% 
+    group_by(year_quarter, visitor_description) %>% 
+    summarise(`観光入込客数（千人回）` = sum(`観光入込客数（千人回）`)) %>% 
+    ggplot(aes(as.factor(year_quarter), 
+               `観光入込客数（千人回）`,
+               color = visitor_description, 
+               group = 1)) + 
+    geom_point() + 
+    geom_line() +
+    theme(axis.text.x = element_text(angle = 90)) +
+    facet_wrap(~ visitor_description)
 
