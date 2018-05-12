@@ -26,6 +26,8 @@
 # the steel doesn't really change (ok, it does, but let's not talk about it)
 # but now it's in the shape you want.
 
+# !!!! this is what melt-cast means!  
+
 
 # You have a spreadsheet of data. Luckily, it's rectangular (missing values are ok).
 # It is partially tidy: each date has a row, but the three regions are spread across columns.
@@ -67,3 +69,14 @@ spreadsheet_df %>%
 
 # Would like to investigate excelgesis also. 
 # The right kinds of handling might ease metadata extraction.
+
+
+
+# match() function gives indices within an object
+# using match() and ncol() to define ranges in a spreadsheet can be very useful
+# sheet names can be extremely misleading...
+
+
+# for any given data tidying project out of spreadsheets, if the column names
+# aren't already in a single row, write a custom function to return the columns
+
