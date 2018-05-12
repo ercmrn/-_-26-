@@ -102,7 +102,9 @@ extracted_data <-
     inner_join(extract_metadata(extracted_data), by = 'li_text') %>% 
     mutate(data_link = paste0(scheme, '://', server, li_filepath),
            filename = gsub('/common/', '', li_filepath),
-           year_quarter = ifelse(timerange == 'yearly', year, calculate_year(year, months)))
+           year_quarter = ifelse(timerange == 'yearly', 
+                                 1988 + as.numeric(as.character(year)), 
+                                 calculate_year(year, months)))
 
 files <- 
     map2(.x = extracted_data$data_link,
